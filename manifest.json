@@ -1,0 +1,9 @@
+{
+  "name": "Bears Brief",
+  "short_name": "Bears Brief",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B162A",
+  "theme_color": "#0B162A",
+  "icons": []
+}
