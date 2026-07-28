@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Eisenhower Matrix</title>
+
+<!-- iOS "Add to Home Screen" support -->
+<!-- Deliberately NOT using apple-mobile-web-app-capable here: that mode
+     creates an isolated storage container separate from regular Safari,
+     which breaks Google sign-in persistence. Leaving this off means the
+     home screen icon opens as a real Safari tab (with the address bar
+     visible) but shares cookies/session normally, so sign-in actually
+     sticks between launches. -->
+<meta name="apple-mobile-web-app-title" content="Eisenhower Matrix">
+<meta name="theme-color" content="#0B162A">
+<link rel="manifest" href="manifest.json">
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  // ---- Config (inlined so this stays a single-file deploy) ----
+  const SUPABASE_URL = 'https://kfbvqqjibcjbkgjocrtl.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmYnZxcWppYmNqYmtnam9jcnRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MzEwMDAsImV4cCI6MjA5MzAwNzAwMH0.caStsdmVfgk0MXbu3stZqrz7vaQOSAdwES0Oc39IuNY';
+  const SGS_TABLE = 'leads';
+  const INLAND_TABLE = 'route_leads';
+  const GOOGLE_CLIENT_ID = '899763667000-odc5tdk44e9k14jrsdg8e0u4uslu02r9.apps.googleusercontent.com';
+</script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --navy: #0B162A;
+    --navy-panel: #101D38;
+    --panel-line: #22314F;
+    --orange: #C83803;
+    --orange-bright: #E8621F;
+    --cream: #F2EFE9;
+    --muted: #8B96AC;
+    --tag-work: #1E3A6E;
+    --tag-personal: #4A5568;
+    --tag-kids: #C83803;
+    --tag-wife: #9C6B2E;
+    --proj-sgs: #1E3A6E;
+    --proj-inland: #7A1F1F;
+    --proj-app: #C83803;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; background: var(--navy); color: var(--cream);
+    font-family: 'Inter', sans-serif; min-height: 100vh;
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; padding: 20px 20px 60px; }
+
+  .tabbar { display: flex; gap: 8px; padding-top: env(safe-area-inset-top, 20px); margin-bottom: 18px; }
+  .tab-btn {
+    flex: 1; padding: 10px; border-radius: 8px; text-align: center;
+    background: var(--navy-panel); border: 1px solid var(--panel-line);
+    color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  .tab-btn.active { background: var(--orange); border-color: var(--orange); color: var(--cream); }
+
+  .eyebrow { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--orange-bright); font-weight: 700; margin-bottom: 6px; }
+  h1 { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 700; margin: 0 0 16px; }
+
+  .date-row { display: flex; align-items: center; margin-bottom: 20px; }
+  .arrow-btn { padding: 6px 14px; color: var(--orange-bright); font-size: 24px; font-weight: 700; background: none; border: none; cursor: pointer; }
+  .date-center { flex: 1; text-align: center; background: none; border: none; color: var(--cream); cursor: pointer; }
+  .date-text { font-size: 15px; font-weight: 600; }
+  .today-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .quad { background: var(--navy-panel); border: 1px solid var(--panel-line); border-top: 3px solid var(--orange); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .quad.dim { border-top-color: var(--muted); }
+  .quad-label { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; }
+  .quad-sub { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 2px 0 10px; }
+  .empty-text { color: var(--muted); font-size: 13px; font-style: italic; }
+
+  .task-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--panel-line); }
+  .task-row:first-of-type { border-top: none; }
+  .checkbox { width: 20px; height: 20px; border-radius: 5px; border: 1.5px solid var(--muted); flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .checkbox.checked { background: var(--orange); border-color: var(--orange); }
+  .checkbox.checked::after { content: "✓"; font-size: 11px; color: var(--navy); font-weight: 700; }
+  .task-body { flex: 1; min-width: 0; }
+  .task-text { font-size: 14px; font-weight: 500; }
+  .task-text.done { text-decoration: line-through; color: var(--muted); }
+  .tag { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 100px; color: var(--cream); margin-top: 4px; }
+  .link-btn { color: var(--orange-bright); font-size: 12px; font-weight: 600; background: none; border: none; cursor: pointer; padding: 4px; }
+  .remove-btn { color: var(--muted); font-size: 18px; background: none; border: none; cursor: pointer; padding: 0 4px; }
+
+  .add-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .add-row select, .add-row input {
+    background: #0a1224; border: 1px solid var(--panel-line); border-radius: 8px;
+    color: var(--cream); font-family: 'Inter', sans-serif; font-size: 13px; padding: 9px 10px;
+  }
+  .add-row input { flex: 1; min-width: 120px; }
+  .add-row button { background: var(--orange); border: none; color: var(--cream); font-weight: 700; font-size: 13px; padding: 9px 14px; border-radius: 8px; cursor: pointer; }
+
+  .card { background: var(--navy-panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .stage-row { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--panel-line); font-size: 14px; }
+  .stage-row:first-of-type { border-top: none; }
+  .stage-count { color: var(--orange-bright); font-weight: 700; }
+
+  .google-btn {
+    background: var(--cream); color: var(--navy); border: none; border-radius: 8px;
+    padding: 12px 18px; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%;
+  }
+  .signed-in-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .signed-in-row button { background: none; border: 1px solid var(--panel-line); color: var(--muted); border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+
+  .footer-note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 20px; line-height: 1.6; }
+  .snapshot-note { font-size: 12px; color: var(--muted); font-style: italic; margin-bottom: 16px; line-height: 1.5; }
+
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .cal-month-label { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 700; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 6px; }
+  .cal-weekday { text-align: center; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 4px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-cell {
+    background: var(--navy-panel); border: 1px solid var(--panel-line); border-radius: 8px;
+    min-height: 74px; padding: 5px; cursor: pointer; overflow: hidden;
+  }
+  .cal-cell:hover { border-color: var(--orange); }
+  .cal-cell.empty { background: transparent; border: none; cursor: default; }
+  .cal-cell.is-today { border-color: var(--orange); border-width: 2px; }
+  .cal-daynum { font-size: 12px; font-weight: 700; color: var(--cream); margin-bottom: 3px; }
+  .cal-item { font-size: 9.5px; color: var(--cream); background: var(--panel-line); border-radius: 3px; padding: 1px 3px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-item.cal-event { background: var(--tag-work); }
+  .cal-more { font-size: 9px; color: var(--muted); }
+  .item-details { display: none; font-size: 12.5px; color: var(--muted); padding: 6px 0 4px 30px; line-height: 1.5; }
+  .task-title-clickable { cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabbar">
+    <button class="tab-btn active" data-tab="today">Today</button>
+    <button class="tab-btn" data-tab="business">CRM</button>
+    <button class="tab-btn" data-tab="projects">Projects</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="calendar">Calendar</button>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+    <select id="theme-picker" onchange="applyTheme(this.value)"
+      style="background:var(--navy-panel);border:1px solid var(--panel-line);color:var(--cream);border-radius:6px;padding:5px 8px;font-size:12px;font-family:'Inter',sans-serif;">
+      <option value="light-clean">Light Clean</option>
+      <option value="light-sand">Light Sand</option>
+      <option value="light-sky">Light Sky</option>
+      <option value="classic">Classic Bears (dark)</option>
+      <option value="slate-teal">Slate &amp; Teal (dark)</option>
+      <option value="charcoal-gold">Charcoal &amp; Gold (dark)</option>
+      <option value="graphite">Graphite Neutral (dark)</option>
+    </select>
+  </div>
+
+  <div class="eyebrow">EISENHOWER MATRIX</div>
+
+  <div id="today-tab"></div>
+  <div id="business-tab" style="display:none;"></div>
+  <div id="projects-tab" style="display:none;"></div>
+  <div id="history-tab" style="display:none;"></div>
+  <div id="calendar-tab" style="display:none;"></div>
+
+  <div class="footer-note">Built on Claude. Saved to your home screen, running from the web.</div>
+</div>
+
+<script>
+// ---------------- Shared constants ----------------
+const TAGS = [
+  { key: 'tmobile', label: 'T-Mobile', color: '#E20074' },
+  { key: 'slipguard', label: 'Slip Guard Solutions', color: 'var(--proj-sgs)' },
+  { key: 'inland', label: 'Inland Xpedited', color: 'var(--proj-inland)' },
+  { key: 'personal', label: 'Personal', color: 'var(--tag-personal)' },
+  { key: 'wife', label: 'Wife', color: 'var(--tag-wife)' },
+  { key: 'kids', label: 'Kids', color: 'var(--tag-kids)' },
+];
+const QUADS = [
+  { key: 'q1', label: 'Do First', sub: 'Urgent + Important', accent: true },
+  { key: 'q2', label: 'Schedule', sub: 'Important, Not Urgent', accent: true },
+  { key: 'q3', label: 'Delegate', sub: 'Urgent, Not Important', accent: false },
+  { key: 'q4', label: 'Eliminate', sub: 'Not Urgent, Not Important', accent: false },
+];
+const PROJECT_COLORS = { SGS: 'var(--proj-sgs)', Inland: 'var(--proj-inland)', App: 'var(--proj-app)' };
+
+function dateKey(d) { return d.toISOString().slice(0, 10); }
+function formatDisplayDate(d) { return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }); }
+function emptyDay() { return { q1: [], q2: [], q3: [], q4: [] }; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Theme system: swaps the app's general chrome (background, panels, accent),
+// but deliberately leaves T-Mobile magenta and Slip Guard's blue untouched —
+// those are treated as fixed brand colors, not part of the theme.
+const THEMES = {
+  classic: {
+    navy: '#0B162A', navyPanel: '#101D38', panelLine: '#22314F',
+    orange: '#C83803', orangeBright: '#E8621F', cream: '#F2EFE9', muted: '#8B96AC',
+  },
+  'slate-teal': {
+    navy: '#0F1A20', navyPanel: '#15242C', panelLine: '#25404A',
+    orange: '#0F9B8E', orangeBright: '#14B8A6', cream: '#EAF2F1', muted: '#7FA0A0',
+  },
+  'charcoal-gold': {
+    navy: '#161616', navyPanel: '#1F1E1C', panelLine: '#38352E',
+    orange: '#B8842E', orangeBright: '#D9A441', cream: '#F0EAE0', muted: '#9C9384',
+  },
+  graphite: {
+    navy: '#16191D', navyPanel: '#1F242A', panelLine: '#333B44',
+    orange: '#8B95A3', orangeBright: '#C3CBD4', cream: '#EDEFF2', muted: '#8A929B',
+  },
+  'light-clean': {
+    navy: '#F7F8FA', navyPanel: '#FFFFFF', panelLine: '#E2E5EA',
+    orange: '#C2410C', orangeBright: '#EA580C', cream: '#1A2233', muted: '#667085',
+  },
+  'light-sand': {
+    navy: '#FAF6EE', navyPanel: '#FFFFFF', panelLine: '#E8DFC8',
+    orange: '#B45309', orangeBright: '#D97706', cream: '#2B2418', muted: '#8A7F68',
+  },
+  'light-sky': {
+    navy: '#F5F8FC', navyPanel: '#FFFFFF', panelLine: '#DCE6F0',
+    orange: '#0F9B72', orangeBright: '#14B888', cream: '#1B2430', muted: '#64748B',
+  },
+};
+
+function applyTheme(themeKey) {
+  const t = THEMES[themeKey] || THEMES.classic;
+  const root = document.documentElement;
+  root.style.setProperty('--navy', t.navy);
+  root.style.setProperty('--navy-panel', t.navyPanel);
+  root.style.setProperty('--panel-line', t.panelLine);
+  root.style.setProperty('--orange', t.orange);
+  root.style.setProperty('--orange-bright', t.orangeBright);
+  root.style.setProperty('--cream', t.cream);
+  root.style.setProperty('--muted', t.muted);
+  localStorage.setItem('bears-brief:theme', themeKey);
+  const picker = document.getElementById('theme-picker');
+  if (picker) picker.value = themeKey;
+}
+function formatTime12hr(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+function daysSince(dateStr) {
+  const then = new Date(dateStr + 'T00:00:00');
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.round((now - then) / 86400000);
+}
+
+// ---------------- Tab switching ----------------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    ['today', 'business', 'projects', 'history', 'calendar'].forEach(t => {
+      document.getElementById(t + '-tab').style.display = (t === btn.dataset.tab) ? 'block' : 'none';
+    });
+    if (btn.dataset.tab === 'business') loadBusinessTab();
+    if (btn.dataset.tab === 'history') loadHistoryTab();
+    if (btn.dataset.tab === 'calendar') renderCalendarTab();
+  });
+});
+
+// ================= SHARED STORAGE (Supabase-backed, syncs across devices) =================
+async function stateGet(key, fallback) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/bears_brief_state?key=eq.${encodeURIComponent(key)}&select=value`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    });
+    if (!res.ok) throw new Error('status ' + res.status);
+    const rows = await res.json();
+    return rows.length ? rows[0].value : fallback;
+  } catch (e) {
+    console.error('stateGet failed, using local cache', e);
+    const raw = localStorage.getItem('bears-brief:cache:' + key);
+    return raw ? JSON.parse(raw) : fallback;
+  }
+}
+async function stateSet(key, value) {
+  localStorage.setItem('bears-brief:cache:' + key, JSON.stringify(value));
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/bears_brief_state?on_conflict=key`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }),
+    });
+  } catch (e) {
+    console.error('stateSet failed, saved locally only', e);
+  }
+}
+
+// ================= TODAY TAB =================
+let currentDate = new Date();
+let day = emptyDay();
+
+async function loadDay() {
+  day = await stateGet('day:' + dateKey(currentDate), emptyDay());
+  renderToday();
+}
+async function saveDay() {
+  await stateSet('day:' + dateKey(currentDate), day);
+}
+async function goToDay(offset) {
+  currentDate.setDate(currentDate.getDate() + offset);
+  await loadDay();
+}
+async function goToToday() { currentDate = new Date(); await loadDay(); }
+async function jumpToDate(dateStr) {
+  if (!dateStr) return;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  currentDate = new Date(y, m - 1, d);
+  await loadDay();
+}
+async function logCompletion(text, tag, source) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/bears_brief_completed_log`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ task_text: text, tag, source, completed_date: dateKey(new Date()) }),
+    });
+  } catch (e) {
+    console.error('logCompletion failed', e);
+  }
+}
+
+function toggleDetails(id) {
+  const el = document.getElementById('details-' + id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function toggleDone(q, i) {
+  const wasDone = day[q][i].done;
+  day[q][i].done = !wasDone;
+  renderToday();
+  await saveDay();
+  if (!wasDone) await logCompletion(day[q][i].text, day[q][i].tag, 'today');
+}
+async function removeTask(q, i) { day[q].splice(i, 1); renderToday(); await saveDay(); }
+async function moveTask(fromQ, i, toQ) {
+  if (fromQ === toQ) return;
+  const t = day[fromQ].splice(i, 1)[0];
+  day[toQ].push(t);
+  renderToday();
+  await saveDay();
+}
+async function loadUnscheduled() {
+  return await stateGet('unscheduled', { q1: [], q2: [], q3: [], q4: [] });
+}
+async function saveUnscheduled(u) {
+  await stateSet('unscheduled', u);
+}
+async function toggleUnscheduledItem(q, i) {
+  const u = await loadUnscheduled();
+  const wasDone = u[q][i].done;
+  u[q][i].done = !wasDone;
+  await saveUnscheduled(u);
+  if (!wasDone) await logCompletion(u[q][i].text, u[q][i].tag, 'backlog');
+  renderToday();
+}
+
+function spreadAcrossWeek(list, offset) {
+  if (offset < 1 || offset > 6) return [];
+  return list.filter((_, idx) => idx % 6 === offset - 1);
+}
+
+async function addTask() {
+  const text = document.getElementById('new-task-text').value.trim();
+  if (!text) return;
+  const q = document.getElementById('new-task-quad').value;
+  const tag = document.getElementById('new-task-tag').value;
+  const time = document.getElementById('new-task-time').value || '';
+  const details = document.getElementById('new-task-details').value.trim();
+  const noDate = document.getElementById('new-task-nodate').checked;
+  const targetDateStr = document.getElementById('new-task-date').value || dateKey(currentDate);
+
+  if (noDate) {
+    const u = await loadUnscheduled();
+    u[q].push({ text, tag, time, details, done: false });
+    await saveUnscheduled(u);
+  } else if (targetDateStr === dateKey(currentDate)) {
+    day[q].push({ text, tag, time, details, done: false });
+    await saveDay();
+  } else {
+    const targetDay = await stateGet('day:' + targetDateStr, emptyDay());
+    targetDay[q].push({ text, tag, time, details, done: false });
+    await stateSet('day:' + targetDateStr, targetDay);
+  }
+
+  document.getElementById('new-task-text').value = '';
+  document.getElementById('new-task-time').value = '';
+  document.getElementById('new-task-details').value = '';
+  renderToday();
+}
+
+function daysBetweenDateOnly(a, b) {
+  const da = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const db = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((db - da) / 86400000);
+}
+
+// Pulls in Projects items relevant to the selected day — only SGS and Inland
+// map to a life category (App-building tasks stay Projects-only, since
+// "building Bears Brief" isn't one of your 6 categories):
+// - viewing today: all "Do First" project items show up here too
+// - viewing 1-6 days out: a slice of the "Schedule" backlog is spread across the week
+function getAutoProjectItems(projects, offset) {
+  const projectToCategory = { SGS: 'slipguard', Inland: 'inland' };
+  const result = {};
+  const source = offset === 0 ? (projects.q1 || []) : (projects.q2 || []);
+  const filtered = source
+    .map((t, i) => ({ ...t, projIndex: i, _quad: offset === 0 ? 'q1' : 'q2' }))
+    .filter(t => !t.done && projectToCategory[t.project]);
+  const finalList = offset === 0 ? filtered : spreadAcrossWeek(filtered, offset);
+  finalList.forEach(t => {
+    const cat = projectToCategory[t.project];
+    if (!result[cat]) result[cat] = [];
+    result[cat].push(t);
+  });
+  return result;
+}
+
+// Same idea, for your own unscheduled tasks (added with "no specific day"):
+// Do First shows today only; Schedule/Delegate/Eliminate spread across the week.
+// Each item already carries its own category tag from when it was added.
+function getAutoUnscheduledItems(unscheduled, offset) {
+  const result = {};
+  const addToResult = (list) => {
+    list.forEach(t => {
+      if (!result[t.tag]) result[t.tag] = [];
+      result[t.tag].push(t);
+    });
+  };
+  if (offset === 0) {
+    addToResult((unscheduled.q1 || []).map((t, i) => ({ ...t, uIndex: i, _quad: 'q1' })).filter(t => !t.done));
+  }
+  ['q2', 'q3', 'q4'].forEach(qk => {
+    const list = (unscheduled[qk] || []).map((t, i) => ({ ...t, uIndex: i, _quad: qk })).filter(t => !t.done);
+    addToResult(spreadAcrossWeek(list, offset));
+  });
+  return result;
+}
+
+async function toggleAutoProjectItem(projQuad, projIndex) {
+  await toggleProject(projQuad, projIndex);
+  renderToday();
+}
+
+async function renderToday() {
+  const isToday = dateKey(currentDate) === dateKey(new Date());
+  const offset = daysBetweenDateOnly(new Date(), currentDate);
+
+  let html = `
+    <div class="date-row">
+      <button class="arrow-btn" onclick="goToDay(-1)">‹</button>
+      <button class="date-center" onclick="goToToday()">
+        <div class="date-text">${formatDisplayDate(currentDate)}</div>
+        ${!isToday ? '<div class="today-hint">tap to jump to today</div>' : ''}
+      </button>
+      <button class="arrow-btn" onclick="goToDay(1)">›</button>
+    </div>
+    <div style="margin-bottom:18px;">
+      <input type="date" id="jump-date-input" value="${dateKey(currentDate)}" onchange="jumpToDate(this.value)"
+        style="width:100%;background:var(--navy-panel);border:1px solid var(--panel-line);border-radius:8px;color:var(--cream);padding:9px 10px;font-family:'Inter',sans-serif;font-size:13px;">
+    </div>
+  `;
+
+  // Calendar events, tagged by source calendar (your own = personal, the
+  // Outlook-subscribed one = T-Mobile), folded directly into their category
+  // section below instead of a separate box.
+  let eventsByCategory = {};
+  if (googleToken) {
+    const events = await fetchEventsForDate(currentDate);
+    if (events.ok) {
+      events.events.forEach(ev => {
+        const cat = ev._tag || 'personal';
+        if (!eventsByCategory[cat]) eventsByCategory[cat] = [];
+        const time = ev.start.dateTime
+          ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Denver' })
+          : 'All day';
+        eventsByCategory[cat].push({ text: ev.summary || 'Untitled event', time, description: ev.description || '', location: ev.location || '' });
+      });
+    }
+  }
+
+  const projects = await loadProjects();
+  const unscheduled = await loadUnscheduled();
+  const autoProjectByCategory = getAutoProjectItems(projects, offset);
+  const autoUnscheduledByCategory = getAutoUnscheduledItems(unscheduled, offset);
+
+  // flatten manual (day-specific) tasks across all priority buckets, group by category
+  const manualByCategory = {};
+  QUADS.forEach(q => {
+    (day[q.key] || []).forEach((t, i) => {
+      if (!manualByCategory[t.tag]) manualByCategory[t.tag] = [];
+      manualByCategory[t.tag].push({ ...t, _quad: q.key, _i: i });
+    });
+  });
+
+  TAGS.forEach(cat => {
+    const calEvents = eventsByCategory[cat.key] || [];
+    const manual = manualByCategory[cat.key] || [];
+    const autoP = autoProjectByCategory[cat.key] || [];
+    const autoU = autoUnscheduledByCategory[cat.key] || [];
+
+    if (calEvents.length === 0 && manual.length === 0 && autoP.length === 0 && autoU.length === 0) {
+      html += `<div class="quad" style="border-top-color:${cat.color}">
+        <div class="quad-label">${cat.label}</div>
+        <div class="empty-text">Nothing here yet.</div>
+      </div>`;
+      return;
+    }
+
+    html += `<div class="quad" style="border-top-color:${cat.color}">
+      <div class="quad-label">${cat.label}</div>`;
+
+    calEvents.forEach((ev, evIdx) => {
+      const evId = `ev-${cat.key}-${evIdx}`;
+      const hasDetails = ev.description || ev.location;
+      html += `
+        <div class="task-row">
+          <div class="task-body task-title-clickable" onclick="toggleDetails('${evId}')">
+            <div class="task-text">${ev.time !== 'All day' ? `<strong>${esc(ev.time)}</strong> — ` : ''}${esc(ev.text)}</div>
+            <span class="tag" style="background:var(--muted)">Calendar</span>
+          </div>
+        </div>
+        <div id="details-${evId}" class="item-details">
+          ${ev.location ? `<div><strong>Where:</strong> ${esc(ev.location)}</div>` : ''}
+          ${ev.description ? `<div>${esc(ev.description)}</div>` : ''}
+          ${!hasDetails ? 'No additional details.' : ''}
+        </div>`;
+    });
+
+    const sortedManual = manual.slice().sort((a, b) => {
+      if (a.carriedFrom && !b.carriedFrom) return -1;
+      if (b.carriedFrom && !a.carriedFrom) return 1;
+      if (a.time && b.time) return a.time.localeCompare(b.time);
+      if (a.time) return -1;
+      if (b.time) return 1;
+      return 0;
+    });
+
+    sortedManual.forEach(t => {
+      const taskId = `task-${t._quad}-${t._i}`;
+      html += `
+        <div class="task-row">
+          <div class="checkbox ${t.done ? 'checked' : ''}" onclick="toggleDone('${t._quad}',${t._i})"></div>
+          <div class="task-body task-title-clickable" onclick="toggleDetails('${taskId}')">
+            <div class="task-text ${t.done ? 'done' : ''}">${t.time ? `<strong>${esc(formatTime12hr(t.time))}</strong> — ` : ''}${esc(t.text)}</div>
+            ${t.carriedFrom ? `<span class="tag" style="background:var(--orange);">${daysSince(t.carriedFrom)} day${daysSince(t.carriedFrom) === 1 ? '' : 's'} overdue</span>` : ''}
+          </div>
+          <select onchange="moveTask('${t._quad}',${t._i},this.value)" style="background:transparent;color:var(--orange-bright);border:none;font-size:12px;">
+            <option value="">priority</option>
+            ${QUADS.filter(qq => qq.key !== t._quad).map(qq => `<option value="${qq.key}">${qq.label}</option>`).join('')}
+          </select>
+          <button class="remove-btn" onclick="removeTask('${t._quad}',${t._i})">×</button>
+        </div>
+        <div id="details-${taskId}" class="item-details">
+          ${t.details ? esc(t.details) : 'No additional details.'}
+          ${t.carriedFrom ? `<div style="margin-top:4px;">Originally due ${esc(t.carriedFrom)}.</div>` : ''}
+        </div>`;
+    });
+
+    autoP.forEach(t => {
+      html += `
+        <div class="task-row">
+          <div class="checkbox" onclick="toggleAutoProjectItem('${t._quad}',${t.projIndex})"></div>
+          <div class="task-body">
+            <div class="task-text">${esc(t.text)}</div>
+            <span class="tag" style="background:var(--muted)">Projects</span>
+          </div>
+        </div>`;
+    });
+
+    autoU.forEach(t => {
+      html += `
+        <div class="task-row">
+          <div class="checkbox" onclick="toggleUnscheduledItem('${t._quad}',${t.uIndex})"></div>
+          <div class="task-body">
+            <div class="task-text">${t.time ? `<strong>${esc(formatTime12hr(t.time))}</strong> — ` : ''}${esc(t.text)}</div>
+            <span class="tag" style="background:var(--muted)">Backlog</span>
+          </div>
+        </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  html += `
+    <div class="add-row">
+      <select id="new-task-tag">${TAGS.map(t => `<option value="${t.key}">${t.label}</option>`).join('')}</select>
+      <select id="new-task-quad">${QUADS.map(q => `<option value="${q.key}">${q.label}</option>`).join('')}</select>
+      <input type="date" id="new-task-date" value="${dateKey(currentDate)}" style="max-width:145px;">
+      <input type="time" id="new-task-time" style="max-width:110px;">
+      <input type="text" id="new-task-text" placeholder="Add a task...">
+      <button id="voice-btn" onclick="toggleVoiceInput()" style="background:var(--panel-line);color:var(--cream);" title="Dictate task">🎤</button>
+      <button onclick="addTask()">Add</button>
+    </div>
+    <input type="text" id="new-task-details" placeholder="Details (optional) — shown when you tap the task"
+      style="width:100%;background:var(--navy-panel);border:1px solid var(--panel-line);border-radius:8px;color:var(--cream);padding:9px 10px;font-family:'Inter',sans-serif;font-size:13px;margin-bottom:10px;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin:-2px 0 20px;">
+      <input type="checkbox" id="new-task-nodate">
+      No specific day — auto-place this across the week for me (uses the priority dropdown to decide when)
+    </label>
+    <div id="voice-status" style="font-size:12px;color:var(--muted);margin:-14px 0 16px;"></div>
+  `;
+
+  document.getElementById('today-tab').innerHTML = html;
+  document.getElementById('new-task-text').addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+}
+
+// ================= BUSINESS TAB =================
+let googleToken = null;
+let tokenClient = null;
+
+function initGoogle() {
+  if (!window.google || GOOGLE_CLIENT_ID.includes('YOUR-WEB-CLIENT-ID')) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly',
+    callback: (resp) => {
+      if (resp.access_token) {
+        googleToken = resp.access_token;
+        const expiresAt = Date.now() + (Number(resp.expires_in || 3600) * 1000);
+        localStorage.setItem('bears-brief:google-token', googleToken);
+        localStorage.setItem('bears-brief:google-token-expires', String(expiresAt));
+        loadBusinessTab();
+      }
+    },
+  });
+  const saved = localStorage.getItem('bears-brief:google-token');
+  const expiresAt = Number(localStorage.getItem('bears-brief:google-token-expires') || 0);
+  if (saved && Date.now() < expiresAt) {
+    googleToken = saved; // still valid, no need to sign in again
+  } else {
+    localStorage.removeItem('bears-brief:google-token');
+    localStorage.removeItem('bears-brief:google-token-expires');
+  }
+}
+
+function signInGoogle() {
+  if (tokenClient) tokenClient.requestAccessToken();
+}
+function signOutGoogle() {
+  googleToken = null;
+  localStorage.removeItem('bears-brief:google-token');
+  localStorage.removeItem('bears-brief:google-token-expires');
+  loadBusinessTab();
+}
+
+async function fetchStageSummary(table) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=stage`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }
+    });
+    if (!res.ok) throw new Error('status ' + res.status);
+    const rows = await res.json();
+    const counts = {};
+    rows.forEach(r => { const s = r.stage || 'Unstaged'; counts[s] = (counts[s] || 0) + 1; });
+    return { ok: true, counts, total: rows.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+let calendarListCache = null;
+async function fetchCalendarList() {
+  if (calendarListCache) return calendarListCache;
+  try {
+    const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+      headers: { Authorization: `Bearer ${googleToken}` }
+    });
+    if (!res.ok) throw new Error('status ' + res.status);
+    const data = await res.json();
+    calendarListCache = (data.items || []).filter(c => !c.id.includes('#holiday@'));
+    return calendarListCache;
+  } catch (e) {
+    console.error('fetchCalendarList failed', e);
+    return [];
+  }
+}
+
+// Pulls events from every non-holiday calendar on the account (primary + any
+// subscribed ones, like an Outlook "publish calendar" link), tagging each
+// event by source: the account's own calendar -> personal, anything else
+// (e.g. the Outlook subscription) -> tmobile. This is an automatic guess
+// based on which calendar it came from, not a per-event manual tag.
+async function fetchAllEventsForRange(startDate, endDate) {
+  if (!googleToken) return { ok: false, error: 'signed_out' };
+  try {
+    const calendars = await fetchCalendarList();
+    let allEvents = [];
+    for (const cal of calendars) {
+      const tag = cal.primary ? 'personal' : 'tmobile';
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${startDate.toISOString()}&timeMax=${endDate.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=250`;
+      try {
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${googleToken}` } });
+        if (!res.ok) continue;
+        const data = await res.json();
+        (data.items || []).forEach(ev => allEvents.push({ ...ev, _tag: tag, _calName: cal.summary }));
+      } catch (e) { /* skip this calendar, keep going */ }
+    }
+    allEvents.sort((a, b) => {
+      const at = a.start.dateTime || a.start.date;
+      const bt = b.start.dateTime || b.start.date;
+      return new Date(at) - new Date(bt);
+    });
+    return { ok: true, events: allEvents };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function fetchEventsForDate(dateObj) {
+  const start = new Date(dateObj); start.setHours(0, 0, 0, 0);
+  const end = new Date(dateObj); end.setHours(23, 59, 59, 999);
+  return fetchAllEventsForRange(start, end);
+}
+async function fetchTodayEvents() { return fetchEventsForDate(new Date()); }
+
+async function fetchUnreadCount() {
+  if (!googleToken) return { ok: false, error: 'signed_out' };
+  try {
+    let count = 0;
+    let pageToken = '';
+    let pages = 0;
+    do {
+      const url = 'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=' +
+        encodeURIComponent('is:unread in:inbox category:primary') +
+        '&maxResults=100' + (pageToken ? `&pageToken=${pageToken}` : '');
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${googleToken}` } });
+      if (!res.ok) throw new Error('status ' + res.status);
+      const data = await res.json();
+      count += (data.messages || []).length;
+      pageToken = data.nextPageToken || '';
+      pages++;
+    } while (pageToken && pages < 10); // cap at 1000 messages, plenty for an unread count
+    return { ok: true, count };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function fetchTMobileSnapshot() {
+  try {
+    const unscheduled = await loadUnscheduled();
+    let openCount = 0;
+    ['q1', 'q2', 'q3', 'q4'].forEach(q => {
+      openCount += (unscheduled[q] || []).filter(t => t.tag === 'tmobile' && !t.done).length;
+    });
+
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const url = `${SUPABASE_URL}/rest/v1/bears_brief_completed_log?tag=eq.tmobile&completed_date=gte.${dateKey(since)}&select=id`;
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+    const completedLast30 = res.ok ? (await res.json()).length : null;
+
+    return { ok: true, openCount, completedLast30 };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+async function loadBusinessTab() {
+  const el = document.getElementById('business-tab');
+  el.innerHTML = `<h1>Your CRM.</h1><div class="empty-text">Loading...</div>`;
+
+  const googleConfigured = !GOOGLE_CLIENT_ID.includes('YOUR-WEB-CLIENT-ID');
+  let googleHtml = '';
+  if (!googleConfigured) {
+    googleHtml = `<div class="card"><div class="empty-text">Add your real Google Web client ID in config.js to connect Calendar and Gmail.</div></div>`;
+  } else if (!googleToken) {
+    googleHtml = `<div class="card"><button class="google-btn" onclick="signInGoogle()">Sign in with Google</button></div>`;
+  } else {
+    const unread = await fetchUnreadCount();
+    googleHtml = `<div class="signed-in-row"><span>Connected to Google</span><button onclick="signOutGoogle()">Sign out</button></div>`;
+    googleHtml += `<div class="card"><div class="quad-label">Inbox</div><div class="stage-row"><span>Unread (Primary)</span><span class="stage-count">${unread.ok ? unread.count : '—'}</span></div></div>`;
+  }
+
+  const [sgs, inland, tmobile] = await Promise.all([
+    fetchStageSummary(SGS_TABLE),
+    fetchStageSummary(INLAND_TABLE),
+    fetchTMobileSnapshot(),
+  ]);
+
+  function renderCrm(label, result) {
+    let h = `<div class="card"><div class="quad-label" style="margin-bottom:10px;">${label}</div>`;
+    if (result.ok) {
+      h += `<div class="quad-sub" style="margin-bottom:8px;">${result.total} total leads, by stage</div>`;
+      Object.entries(result.counts).forEach(([stage, count]) => {
+        h += `<div class="stage-row"><span>${esc(stage)}</span><span class="stage-count">${count}</span></div>`;
+      });
+    } else {
+      h += `<div class="empty-text">Could not load — check config.js.</div>`;
+    }
+    h += `</div>`;
+    return h;
+  }
+
+  let tmobileHtml = `<div class="card"><div class="quad-label" style="margin-bottom:10px;">T-Mobile</div>`;
+  if (tmobile.ok) {
+    tmobileHtml += `<div class="stage-row"><span>Open items in backlog</span><span class="stage-count">${tmobile.openCount}</span></div>`;
+    tmobileHtml += `<div class="stage-row"><span>Completed, last 30 days</span><span class="stage-count">${tmobile.completedLast30 ?? '—'}</span></div>`;
+    tmobileHtml += `<div class="empty-text" style="margin-top:8px;">No external CRM feeds this yet — it's pulling from T-Mobile-tagged items you've added directly in the app.</div>`;
+  } else {
+    tmobileHtml += `<div class="empty-text">Could not load T-Mobile snapshot.</div>`;
+  }
+  tmobileHtml += `</div>`;
+
+  el.innerHTML = `<h1>Your CRM.</h1>${googleHtml}${renderCrm('Slip Guard Solutions', sgs)}${renderCrm('Inland Xpedited', inland)}${tmobileHtml}`;
+}
+
+// ================= PROJECTS TAB =================
+const SEED_DATE = '2026-07-21';
+const DEFAULT_PROJECT_TASKS = {
+  q1: [
+    { text: 'Confirm slipguardsolutions.com domain transfer to Cloudflare completed', project: 'SGS', done: false },
+    { text: 'Deploy Inland CRM to Cloudflare Pages (rename to index.html, connect domain)', project: 'Inland', done: false },
+    { text: 'Verify SPF/DKIM/DMARC on inlandxmile.com before sending outbound waves', project: 'Inland', done: false },
+    { text: 'Add real Google Web client ID for Calendar/Gmail sign-in', project: 'App', done: false },
+  ],
+  q2: [
+    { text: 'Decide on purchasing quality leads for the outbound agent', project: 'SGS', done: false },
+    { text: 'Refine outbound cold emails; explore video integration + subject line tricks', project: 'SGS', done: false },
+    { text: 'Fix stage filter to hide empty columns, not just empty cards', project: 'SGS', done: false },
+    { text: 'Build the Inland outbound super agent (clone of SGS agent for route verticals)', project: 'Inland', done: false },
+    { text: 'Triage the 804 raw leads down to the best ~80, enrich via Apollo/Perplexity', project: 'Inland', done: false },
+    { text: 'Lock down Supabase RLS policies on route_leads/route_documents tables', project: 'Inland', done: false },
+    { text: 'Set up the Mac text-message export pipeline', project: 'App', done: false },
+    { text: 'Decide on public release scope once personal use proves it out', project: 'App', done: false },
+    { text: 'Deploy this site to Cloudflare Pages for real daily use', project: 'App', done: false },
+  ],
+  q3: [],
+  q4: [
+    { text: 'Build CRM mobile app or home-screen shortcut', project: 'SGS', done: false },
+    { text: 'Clean up CRM mobile formatting', project: 'SGS', done: false },
+    { text: 'Add Siri shortcut support (needs a native app, later phase)', project: 'App', done: false },
+  ],
+};
+
+async function loadProjects() {
+  return await stateGet('projects', DEFAULT_PROJECT_TASKS);
+}
+async function saveProjects(p) {
+  await stateSet('projects', p);
+}
+async function toggleProject(q, i) {
+  const p = await loadProjects();
+  const wasDone = p[q][i].done;
+  p[q][i].done = !wasDone;
+  await renderProjectsWith(p);
+  await saveProjects(p);
+  if (!wasDone) await logCompletion(p[q][i].text, p[q][i].project, 'project');
+}
+
+async function renderProjects() {
+  const projects = await loadProjects();
+  await renderProjectsWith(projects);
+}
+
+async function renderProjectsWith(projects) {
+  let html = `<h1>Projects with Claude.</h1>
+    <div class="snapshot-note">Synced from Supabase — ask Claude to "refresh my project checklist" and it can update this directly, no redeploy needed.</div>`;
+
+  QUADS.forEach(q => {
+    html += `<div class="quad ${q.accent ? '' : 'dim'}">
+      <div class="quad-label">${q.label}</div>
+      <div class="quad-sub">${q.sub}</div>`;
+    const tasks = projects[q.key] || [];
+    if (tasks.length === 0) html += `<div class="empty-text">Nothing here right now.</div>`;
+    tasks.forEach((t, i) => {
+      html += `
+        <div class="task-row">
+          <div class="checkbox ${t.done ? 'checked' : ''}" onclick="toggleProject('${q.key}',${i})"></div>
+          <div class="task-body">
+            <div class="task-text ${t.done ? 'done' : ''}">${esc(t.text)}</div>
+            <span class="tag" style="background:${PROJECT_COLORS[t.project] || 'var(--muted)'}">${t.project}</span>
+          </div>
+        </div>`;
+    });
+    html += `</div>`;
+  });
+
+  document.getElementById('projects-tab').innerHTML = html;
+}
+
+async function fetchCompletedLog(searchText, searchDate) {
+  let url = `${SUPABASE_URL}/rest/v1/bears_brief_completed_log?select=*&order=completed_date.desc,created_at.desc&limit=200`;
+  if (searchText) url += `&task_text=ilike.*${encodeURIComponent(searchText)}*`;
+  if (searchDate) url += `&completed_date=eq.${searchDate}`;
+  try {
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+    if (!res.ok) throw new Error('status ' + res.status);
+    return { ok: true, rows: await res.json() };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+function formatLogDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function loadHistoryTab(searchText, searchDate) {
+  searchText = searchText || '';
+  searchDate = searchDate || '';
+  const result = await fetchCompletedLog(searchText, searchDate);
+  const el = document.getElementById('history-tab');
+
+  let html = `<h1>Everything you've finished.</h1>
+    <div class="add-row" style="margin-bottom:20px;">
+      <input type="text" id="history-search" placeholder="Search completed tasks..." value="${esc(searchText)}" style="flex:2;">
+      <input type="date" id="history-date-input" value="${esc(searchDate)}" style="flex:1;">
+      <button onclick="applyHistoryFilters()">Search</button>
+      <button onclick="loadHistoryTab('','')" style="background:var(--panel-line);">Clear</button>
+    </div>`;
+
+  if (!result.ok) {
+    html += `<div class="empty-text">Could not load history — make sure you've created the bears_brief_completed_log table.</div>`;
+  } else if (result.rows.length === 0) {
+    html += `<div class="empty-text">Nothing completed yet matching that search.</div>`;
+  } else {
+    let lastDate = null;
+    result.rows.forEach(row => {
+      if (row.completed_date !== lastDate) {
+        html += `<div class="quad-sub" style="margin-top:16px;margin-bottom:6px;">${formatLogDate(row.completed_date)}</div>`;
+        lastDate = row.completed_date;
+      }
+      const tagColor = PROJECT_COLORS[row.tag] || (TAGS.find(t => t.key === row.tag) || {}).color || 'var(--muted)';
+      html += `
+        <div class="card" style="margin-bottom:8px;padding:12px 16px;">
+          <div class="task-text">${esc(row.task_text)}</div>
+          <span class="tag" style="background:${tagColor}">${esc(row.tag || row.source)}</span>
+        </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+  document.getElementById('history-search').addEventListener('keydown', e => { if (e.key === 'Enter') applyHistoryFilters(); });
+}
+
+function applyHistoryFilters() {
+  const text = document.getElementById('history-search').value;
+  const date = document.getElementById('history-date-input').value;
+  loadHistoryTab(text, date);
+}
+
+// ================= VOICE DICTATION (best-effort — iOS Safari support is known to be inconsistent) =================
+let voiceRecognition = null;
+let voiceListening = false;
+
+function toggleVoiceInput() {
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const statusEl = document.getElementById('voice-status');
+
+  if (!SpeechRecognitionClass) {
+    if (statusEl) statusEl.textContent = "Voice input isn't supported in this browser.";
+    return;
+  }
+
+  if (voiceListening && voiceRecognition) {
+    voiceRecognition.stop();
+    return;
+  }
+
+  voiceRecognition = new SpeechRecognitionClass();
+  voiceRecognition.lang = 'en-US';
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+
+  voiceRecognition.onstart = () => {
+    voiceListening = true;
+    if (statusEl) statusEl.textContent = 'Listening...';
+    const btn = document.getElementById('voice-btn');
+    if (btn) btn.style.background = 'var(--orange)';
+  };
+
+  voiceRecognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    const input = document.getElementById('new-task-text');
+    if (input) input.value = transcript;
+    if (statusEl) statusEl.textContent = 'Heard: "' + transcript + '" — review before adding.';
+  };
+
+  voiceRecognition.onerror = (event) => {
+    if (statusEl) statusEl.textContent = 'Voice input failed (' + event.error + '). Try again or type it instead.';
+  };
+
+  voiceRecognition.onend = () => {
+    voiceListening = false;
+    const btn = document.getElementById('voice-btn');
+    if (btn) btn.style.background = 'var(--panel-line)';
+  };
+
+  try {
+    voiceRecognition.start();
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Could not start voice input on this device.';
+  }
+}
+
+// ================= CALENDAR TAB (month/week/day views) =================
+let calendarViewDate = new Date();
+let calendarViewMode = 'month'; // 'month' | 'week' | 'day'
+let calendarExpandedDate = null; // set when a day is tapped in month/week view
+
+async function fetchEventsForRange(startDate, endDate) { return fetchAllEventsForRange(startDate, endDate); }
+
+// One request grabs every stored day in the month at once, instead of 30+ separate calls
+async function fetchMonthDaysData(year, month) {
+  const prefix = `day:${year}-${String(month).padStart(2, '0')}-`;
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/bears_brief_state?key=like.${encodeURIComponent(prefix)}*&select=key,value`;
+    const res = await fetch(url, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+    if (!res.ok) throw new Error('status ' + res.status);
+    const rows = await res.json();
+    const map = {};
+    rows.forEach(r => { map[r.key.replace('day:', '')] = r.value; });
+    return map;
+  } catch (e) {
+    console.error('fetchMonthDaysData failed', e);
+    return {};
+  }
+}
+
+function setCalendarMode(mode) {
+  calendarViewMode = mode;
+  calendarExpandedDate = null;
+  renderCalendarTab();
+}
+
+function goToCalendarMonth(offset) {
+  calendarViewDate.setMonth(calendarViewDate.getMonth() + offset);
+  calendarExpandedDate = null;
+  renderCalendarTab();
+}
+function goToCalendarWeek(offset) {
+  calendarViewDate.setDate(calendarViewDate.getDate() + offset * 7);
+  calendarExpandedDate = null;
+  renderCalendarTab();
+}
+function goToCalendarDay(offset) {
+  calendarViewDate.setDate(calendarViewDate.getDate() + offset);
+  renderCalendarTab();
+}
+
+function toggleExpandedDate(dateStr) {
+  calendarExpandedDate = (calendarExpandedDate === dateStr) ? null : dateStr;
+  renderCalendarTab();
+}
+
+async function toggleCalendarDayTask(dateStr, quad, index) {
+  const d = await stateGet('day:' + dateStr, emptyDay());
+  const wasDone = d[quad][index].done;
+  d[quad][index].done = !wasDone;
+  await stateSet('day:' + dateStr, d);
+  if (!wasDone) await logCompletion(d[quad][index].text, d[quad][index].tag, 'today');
+  renderCalendarTab();
+}
+async function removeCalendarDayTask(dateStr, quad, index) {
+  const d = await stateGet('day:' + dateStr, emptyDay());
+  d[quad].splice(index, 1);
+  await stateSet('day:' + dateStr, d);
+  renderCalendarTab();
+}
+async function addCalendarDayTask(dateStr) {
+  const idSuffix = dateStr;
+  const text = document.getElementById('cal-text-' + idSuffix).value.trim();
+  if (!text) return;
+  const tag = document.getElementById('cal-tag-' + idSuffix).value;
+  const quad = document.getElementById('cal-quad-' + idSuffix).value;
+  const time = document.getElementById('cal-time-' + idSuffix).value || '';
+  const d = await stateGet('day:' + dateStr, emptyDay());
+  d[quad].push({ text, tag, time, done: false });
+  await stateSet('day:' + dateStr, d);
+  renderCalendarTab();
+}
+
+// Builds one merged, time-sorted agenda for a single day: calendar events + your tasks
+async function renderExpandedDayPanel(dateStr) {
+  const [y, m, dd] = dateStr.split('-').map(Number);
+  const dObj = new Date(y, m - 1, dd);
+  const displayDate = dObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const [eventsResult, dayData] = await Promise.all([
+    googleToken ? fetchEventsForDate(dObj) : Promise.resolve({ ok: false }),
+    stateGet('day:' + dateStr, emptyDay()),
+  ]);
+
+  let items = [];
+  if (eventsResult.ok) {
+    eventsResult.events.forEach(ev => {
+      const isAllDay = !ev.start.dateTime;
+      const time = isAllDay ? '' : new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Denver' });
+      items.push({ kind: 'event', text: ev.summary || 'Untitled event', time: isAllDay ? 'All day' : time, tag: ev._tag || 'personal', sortKey: isAllDay ? '00:00' : time24FromDateTime(ev.start.dateTime) });
+    });
+  }
+  QUADS.forEach(q => {
+    (dayData[q.key] || []).forEach((t, i) => {
+      items.push({ kind: 'task', text: t.text, time: t.time ? formatTime12hr(t.time) : '', tag: t.tag, done: t.done, quad: q.key, index: i, sortKey: t.time || '23:59' });
+    });
+  });
+  items.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  let html = `<div class="card" style="margin-top:10px;">
+    <div class="quad-label" style="margin-bottom:10px;">${displayDate}</div>`;
+
+  if (items.length === 0) {
+    html += `<div class="empty-text">Nothing yet.</div>`;
+  } else {
+    items.forEach(it => {
+      const tagInfo = TAGS.find(t => t.key === it.tag);
+      const tagColor = tagInfo ? tagInfo.color : 'var(--muted)';
+      const tagLabel = tagInfo ? tagInfo.label : (it.tag || '');
+      if (it.kind === 'event') {
+        html += `
+          <div class="task-row">
+            <div class="task-body">
+              <div class="task-text">${it.time !== 'All day' ? `<strong>${esc(it.time)}</strong> — ` : ''}${esc(it.text)}</div>
+              <span class="tag" style="background:${tagColor}">${esc(tagLabel)} · Calendar</span>
+            </div>
+          </div>`;
+      } else {
+        html += `
+          <div class="task-row">
+            <div class="checkbox ${it.done ? 'checked' : ''}" onclick="toggleCalendarDayTask('${dateStr}','${it.quad}',${it.index})"></div>
+            <div class="task-body">
+              <div class="task-text ${it.done ? 'done' : ''}">${it.time ? `<strong>${esc(it.time)}</strong> — ` : ''}${esc(it.text)}</div>
+              <span class="tag" style="background:${tagColor}">${esc(tagLabel)}</span>
+            </div>
+            <button class="remove-btn" onclick="removeCalendarDayTask('${dateStr}','${it.quad}',${it.index})">×</button>
+          </div>`;
+      }
+    });
+  }
+
+  html += `
+    <div class="add-row" style="margin-top:14px;">
+      <select id="cal-tag-${dateStr}">${TAGS.map(t => `<option value="${t.key}">${t.label}</option>`).join('')}</select>
+      <select id="cal-quad-${dateStr}">${QUADS.map(q => `<option value="${q.key}">${q.label}</option>`).join('')}</select>
+      <input type="time" id="cal-time-${dateStr}" style="max-width:110px;">
+      <input type="text" id="cal-text-${dateStr}" placeholder="Add something for this day...">
+      <button onclick="addCalendarDayTask('${dateStr}')">Add</button>
+    </div>
+  </div>`;
+
+  return html;
+}
+
+function time24FromDateTime(dtString) {
+  const d = new Date(dtString);
+  const h = d.toLocaleTimeString('en-US', { hour: '2-digit', hour12: false, timeZone: 'America/Denver' });
+  const m = d.toLocaleTimeString('en-US', { minute: '2-digit', timeZone: 'America/Denver' });
+  return `${h.padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function calendarViewToggle() {
+  return `
+    <div class="tabbar" style="padding-top:0;margin-bottom:16px;">
+      <button class="tab-btn ${calendarViewMode === 'month' ? 'active' : ''}" onclick="setCalendarMode('month')">Month</button>
+      <button class="tab-btn ${calendarViewMode === 'week' ? 'active' : ''}" onclick="setCalendarMode('week')">Week</button>
+      <button class="tab-btn ${calendarViewMode === 'day' ? 'active' : ''}" onclick="setCalendarMode('day')">Day</button>
+    </div>`;
+}
+
+async function renderCalendarTab() {
+  if (calendarViewMode === 'month') return renderCalendarMonth();
+  if (calendarViewMode === 'week') return renderCalendarWeek();
+  return renderCalendarDay();
+}
+
+async function renderCalendarMonth() {
+  const el = document.getElementById('calendar-tab');
+  const year = calendarViewDate.getFullYear();
+  const month = calendarViewDate.getMonth();
+  const monthLabel = calendarViewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  el.innerHTML = `<h1>Your calendar.</h1>${calendarViewToggle()}<div class="empty-text">Loading...</div>`;
+
+  const rangeStart = new Date(year, month, 1);
+  const rangeEnd = new Date(year, month + 1, 1);
+
+  const [eventsResult, dayMap] = await Promise.all([
+    fetchEventsForRange(rangeStart, rangeEnd),
+    fetchMonthDaysData(year, month + 1),
+  ]);
+
+  const eventsByDate = {};
+  if (eventsResult.ok) {
+    eventsResult.events.forEach(ev => {
+      const raw = ev.start.dateTime || ev.start.date;
+      if (!raw) return;
+      const key = new Date(raw).toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+      if (!eventsByDate[key]) eventsByDate[key] = [];
+      const time = ev.start.dateTime
+        ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Denver' })
+        : '';
+      eventsByDate[key].push((time ? time + ' ' : '') + (ev.summary || 'Untitled'));
+    });
+  }
+
+  const firstWeekday = rangeStart.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = dateKey(new Date());
+  const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  let html = `<h1>Your calendar.</h1>${calendarViewToggle()}
+    <div class="cal-header">
+      <button class="arrow-btn" onclick="goToCalendarMonth(-1)">‹</button>
+      <div class="cal-month-label">${monthLabel}</div>
+      <button class="arrow-btn" onclick="goToCalendarMonth(1)">›</button>
+    </div>
+    <div class="cal-weekdays">${weekdayLabels.map(w => `<div class="cal-weekday">${w}</div>`).join('')}</div>
+    <div class="cal-grid">`;
+
+  for (let i = 0; i < firstWeekday; i++) html += `<div class="cal-cell empty"></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isToday = dateStr === todayStr;
+    const dayEvents = eventsByDate[dateStr] || [];
+    const dayData = dayMap[dateStr];
+    let openTaskCount = 0;
+    if (dayData) QUADS.forEach(q => { openTaskCount += (dayData[q.key] || []).filter(t => !t.done).length; });
+
+    const items = [];
+    dayEvents.slice(0, 2).forEach(ev => items.push(`<div class="cal-item cal-event">${esc(ev)}</div>`));
+    const remainingSlots = 2 - Math.min(dayEvents.length, 2);
+    if (remainingSlots > 0 && openTaskCount > 0) items.push(`<div class="cal-item">${openTaskCount} task${openTaskCount === 1 ? '' : 's'}</div>`);
+    const moreCount = Math.max(0, dayEvents.length - 2);
+
+    html += `
+      <div class="cal-cell ${isToday ? 'is-today' : ''}" onclick="toggleExpandedDate('${dateStr}')">
+        <div class="cal-daynum">${day}</div>
+        ${items.join('')}
+        ${moreCount > 0 ? `<div class="cal-more">+${moreCount} more</div>` : ''}
+      </div>`;
+  }
+  html += `</div>`;
+
+  if (!googleToken) html += `<div class="empty-text" style="margin-top:14px;">Sign in with Google on the CRM tab to see calendar events here too.</div>`;
+
+  el.innerHTML = html;
+
+  if (calendarExpandedDate) {
+    const panel = await renderExpandedDayPanel(calendarExpandedDate);
+    document.getElementById('calendar-tab').innerHTML += panel;
+  }
+}
+
+async function renderCalendarWeek() {
+  const el = document.getElementById('calendar-tab');
+  el.innerHTML = `<h1>Your calendar.</h1>${calendarViewToggle()}<div class="empty-text">Loading...</div>`;
+
+  const start = new Date(calendarViewDate);
+  start.setDate(start.getDate() - start.getDay()); // back to Sunday
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+
+  const weekLabel = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(end - 1).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  const [eventsResult, dayMap] = await Promise.all([
+    fetchEventsForRange(start, end),
+    fetchMonthDaysData(start.getFullYear(), start.getMonth() + 1),
+  ]);
+
+  const eventsByDate = {};
+  if (eventsResult.ok) {
+    eventsResult.events.forEach(ev => {
+      const raw = ev.start.dateTime || ev.start.date;
+      if (!raw) return;
+      const key = new Date(raw).toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+      if (!eventsByDate[key]) eventsByDate[key] = [];
+      const time = ev.start.dateTime
+        ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Denver' })
+        : 'All day';
+      eventsByDate[key].push(`${time} ${ev.summary || 'Untitled'}`);
+    });
+  }
+
+  const todayStr = dateKey(new Date());
+  let html = `<h1>Your calendar.</h1>${calendarViewToggle()}
+    <div class="cal-header">
+      <button class="arrow-btn" onclick="goToCalendarWeek(-1)">‹</button>
+      <div class="cal-month-label">${weekLabel}</div>
+      <button class="arrow-btn" onclick="goToCalendarWeek(1)">›</button>
+    </div>
+    <div class="cal-grid" style="grid-template-columns:repeat(7,1fr);">`;
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const dateStr = dateKey(d);
+    const isToday = dateStr === todayStr;
+    const dayEvents = eventsByDate[dateStr] || [];
+    const dayData = dayMap[dateStr];
+    let openTasks = [];
+    if (dayData) QUADS.forEach(q => (dayData[q.key] || []).forEach(t => { if (!t.done) openTasks.push(t.text); }));
+
+    html += `
+      <div class="cal-cell ${isToday ? 'is-today' : ''}" style="min-height:130px;" onclick="toggleExpandedDate('${dateStr}')">
+        <div class="cal-daynum">${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}</div>
+        ${dayEvents.map(ev => `<div class="cal-item cal-event">${esc(ev)}</div>`).join('')}
+        ${openTasks.map(t => `<div class="cal-item">${esc(t)}</div>`).join('')}
+      </div>`;
+  }
+  html += `</div>`;
+
+  if (!googleToken) html += `<div class="empty-text" style="margin-top:14px;">Sign in with Google on the CRM tab to see calendar events here too.</div>`;
+
+  el.innerHTML = html;
+
+  if (calendarExpandedDate) {
+    const panel = await renderExpandedDayPanel(calendarExpandedDate);
+    document.getElementById('calendar-tab').innerHTML += panel;
+  }
+}
+
+async function renderCalendarDay() {
+  const el = document.getElementById('calendar-tab');
+  const dateStr = dateKey(calendarViewDate);
+  const displayDate = calendarViewDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  el.innerHTML = `<h1>Your calendar.</h1>${calendarViewToggle()}
+    <div class="cal-header">
+      <button class="arrow-btn" onclick="goToCalendarDay(-1)">‹</button>
+      <div class="cal-month-label">${displayDate}</div>
+      <button class="arrow-btn" onclick="goToCalendarDay(1)">›</button>
+    </div>
+    <div class="empty-text">Loading...</div>`;
+
+  const panel = await renderExpandedDayPanel(dateStr);
+  el.innerHTML = `<h1>Your calendar.</h1>${calendarViewToggle()}
+    <div class="cal-header">
+      <button class="arrow-btn" onclick="goToCalendarDay(-1)">‹</button>
+      <div class="cal-month-label">${displayDate}</div>
+      <button class="arrow-btn" onclick="goToCalendarDay(1)">›</button>
+    </div>
+    ${panel}`;
+}
+
+// ================= CARRY-OVER: unfinished tasks roll forward to today =================
+async function runCarryOverIfNeeded() {
+  const todayStr = dateKey(new Date());
+  if (localStorage.getItem('bears-brief:carryover-last-run') === todayStr) return;
+
+  const rolled = emptyDay();
+  const maxLookbackDays = 14;
+
+  for (let i = 1; i <= maxLookbackDays; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = dateKey(d);
+    let dayData;
+    try {
+      dayData = await stateGet('day:' + key, null);
+    } catch (e) { continue; }
+    if (!dayData) continue;
+
+    let changed = false;
+    QUADS.forEach(q => {
+      const remaining = [];
+      (dayData[q.key] || []).forEach(t => {
+        if (!t.done) {
+          rolled[q.key].push({ ...t, carriedFrom: t.carriedFrom || key });
+          changed = true;
+        } else {
+          remaining.push(t);
+        }
+      });
+      dayData[q.key] = remaining;
+    });
+    if (changed) await stateSet('day:' + key, dayData);
+  }
+
+  const hasAny = QUADS.some(q => rolled[q.key].length > 0);
+  if (hasAny) {
+    const todayData = await stateGet('day:' + todayStr, emptyDay());
+    QUADS.forEach(q => { todayData[q.key] = [...(todayData[q.key] || []), ...rolled[q.key]]; });
+    await stateSet('day:' + todayStr, todayData);
+  }
+
+  localStorage.setItem('bears-brief:carryover-last-run', todayStr);
+}
+
+// ================= INIT =================
+window.addEventListener('load', async () => {
+  applyTheme(localStorage.getItem('bears-brief:theme') || 'light-clean');
+  await runCarryOverIfNeeded();
+  loadDay();
+  renderProjects();
+  setTimeout(initGoogle, 300); // give the GIS script a moment to load
+});
+</script>
+</body>
+</html>
